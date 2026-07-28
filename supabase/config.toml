@@ -1,0 +1,30 @@
+# Supabase local config. `project_id` names the local Docker stack; the CLI also
+# parses this file before remote commands like `functions deploy`.
+project_id = "procount"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+major_version = 15
+
+[studio]
+enabled = true
+port = 54323
+
+[auth]
+enabled = true
+enable_signup = true
+
+[auth.email]
+# Brief Section 6: email confirmation required before first sign-in.
+enable_confirmations = true
+
+[functions.send-session-report]
+# Edge Function for CSV/XLSX export email (brief Section 9).
+verify_jwt = true
