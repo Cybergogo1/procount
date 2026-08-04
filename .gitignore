@@ -46,3 +46,7 @@ yarn-error.*
 # Deno (edge function local test deps)
 supabase/functions/**/node_modules/
 supabase/functions/**/deno.lock
+
+# App Store Connect API key (secret — never commit)
+AuthKey_*.p8
+*.p8

@@ -15,8 +15,8 @@ import { Button } from '@/components/Button';
 import { TextField } from '@/components/TextField';
 import { colors, radii, spacing, textStyles } from '@/theme';
 import {
-  markSessionForExport,
   requestSessionReport,
+  setSessionExportEmail,
   type ExportFormat,
 } from './api';
 
@@ -26,17 +26,17 @@ type EndSessionSheetProps = {
   sessionId: string | null;
   totalItems: number;
   lineItems: number;
-  /** Called after a successful send so the caller can start a fresh session. */
-  onExported: () => void;
+  /** Called after a successful send. The session/count is kept intact. */
+  onSent: () => void;
 };
 
 const emailSchema = z.string().trim().email();
 
 /**
- * End Session & Export modal sheet (brief Section 9). Collects the manager's
- * email and the format, marks the session complete, then invokes the Edge
- * Function. On success the parent clears the screen and starts a new session;
- * on failure the sheet stays open for retry.
+ * Export modal sheet (brief Section 9). Collects the manager's email + format
+ * and invokes the Edge Function. The session stays active and its scans are
+ * kept afterwards (client request) — on success the sheet closes and the user
+ * returns to their count; on failure it stays open for retry.
  */
 export function EndSessionSheet({
   visible,
@@ -44,7 +44,7 @@ export function EndSessionSheet({
   sessionId,
   totalItems,
   lineItems,
-  onExported,
+  onSent,
 }: EndSessionSheetProps) {
   const [email, setEmail] = useState('');
   const [format, setFormat] = useState<ExportFormat>('xlsx');
@@ -81,10 +81,10 @@ export function EndSessionSheet({
     setSending(true);
     setError(null);
     try {
-      await markSessionForExport(sessionId, parsed.data);
+      await setSessionExportEmail(sessionId, parsed.data);
       await requestSessionReport(sessionId, format, combine);
       reset();
-      onExported();
+      onSent();
     } catch (err) {
       setError(
         err instanceof Error

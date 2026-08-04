@@ -15,6 +15,7 @@ import { Button } from '@/components/Button';
 import { Screen } from '@/components/Screen';
 import { signOut } from '@/features/auth/api';
 import { useAuth } from '@/features/auth/AuthProvider';
+import { startNewCount } from '@/features/session/startNewCount';
 import { useSubscription } from '@/features/subscription/SubscriptionProvider';
 import { useAccess } from '@/features/subscription/useAccess';
 import { colors, radii, spacing, textStyles } from '@/theme';
@@ -52,6 +53,24 @@ export default function SettingsScreen() {
 
   const handleManage = () => {
     if (MANAGE_URL) void Linking.openURL(MANAGE_URL);
+  };
+
+  const handleNewCount = () => {
+    Alert.alert(
+      'Start a new count?',
+      'This clears the current count and starts fresh. Export it first if you need to keep it.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Start new count',
+          style: 'destructive',
+          onPress: async () => {
+            if (user) await startNewCount(user.id);
+            router.back(); // return to the freshly-cleared scanner
+          },
+        },
+      ],
+    );
   };
 
   const handleRestore = async () => {
@@ -95,6 +114,14 @@ export default function SettingsScreen() {
       <View style={styles.list}>
         <Row label="Account" value={user?.email ?? '—'} />
         <Row label="Subscription" value={subscriptionLabel(access)} />
+        {/* Reachable while on trial so users (and testers) can subscribe early. */}
+        {!access.hasActiveSubscription && (
+          <ActionRow
+            label="Upgrade to Pro"
+            onPress={() => router.push('/(app)/paywall')}
+          />
+        )}
+        <ActionRow label="Start new count" onPress={handleNewCount} />
         <ActionRow label="Manage subscription" onPress={handleManage} />
         <ActionRow
           label={restoring ? 'Restoring…' : 'Restore purchases'}

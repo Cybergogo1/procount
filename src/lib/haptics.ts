@@ -16,7 +16,11 @@ export function scanSuccessHaptic(): void {
   );
 }
 
-export function lightHaptic(): void {
+/**
+ * Sharp, firm tap for calculator keypresses (client request): a crisp "rigid"
+ * impact so keys feel responsive on glass during fast entry.
+ */
+export function keypadHaptic(): void {
   if (Platform.OS === 'web') return;
-  void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+  void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Rigid).catch(() => {});
 }

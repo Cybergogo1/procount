@@ -22,6 +22,7 @@ import { BarcodeScanner } from '@/features/scanner/BarcodeScanner';
 import { CameraPermissionGate } from '@/features/scanner/CameraPermissionGate';
 import { useSessionSync } from '@/features/session/useSessionSync';
 import { useAccess } from '@/features/subscription/useAccess';
+import { maybeRequestReviewAfterExport } from '@/lib/review';
 import {
   useSessionStore,
   useTotalCount,
@@ -51,7 +52,6 @@ export default function ScannerScreen() {
     editScan,
     deleteScan,
     restoreScan,
-    resetForNewSession,
   } = useSessionSync();
   const sessionId = useSessionStore((s) => s.sessionId);
 
@@ -160,11 +160,13 @@ export default function ScannerScreen() {
     setUndo(null);
   };
 
-  const handleExported = () => {
-    // Brief Section 9, step 5: clear the screen and start a new session.
+  const handleReportSent = () => {
+    // Client request: keep the active count intact after exporting — just close
+    // the sheet and confirm. (Use Settings → Start new count to reset.)
     setExportOpen(false);
-    resetForNewSession();
     setExportSuccess(true);
+    // Ask for an app-store review once, after the first successful export.
+    void maybeRequestReviewAfterExport();
   };
 
   const openRowEditor = useCallback((scan: ScanItem) => {
@@ -308,13 +310,14 @@ export default function ScannerScreen() {
         }
       />
 
-      {/* End session (brief Sections 7.7 & 8: hold while writes drain). */}
+      {/* Export the count (Section 8: hold while writes drain so the server
+          reads a fully-synced count). The session is kept after exporting. */}
       <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.lg }]}>
         <Button
           label={
             syncStatus === 'syncing'
-              ? 'Finishing up — just a moment…'
-              : 'End Session & Export'
+              ? 'Saving — just a moment…'
+              : 'Export Count'
           }
           variant="secondary"
           disabled={syncStatus === 'syncing' || scans.length === 0}
@@ -331,7 +334,7 @@ export default function ScannerScreen() {
 
       <Toast
         visible={exportSuccess}
-        message="Report sent — new session started"
+        message="Report sent"
         onDismiss={() => setExportSuccess(false)}
       />
 
@@ -341,7 +344,7 @@ export default function ScannerScreen() {
         sessionId={sessionId}
         totalItems={total}
         lineItems={scans.length}
-        onExported={handleExported}
+        onSent={handleReportSent}
       />
 
       {/* Count calculator — for the in-progress scan ('new') and row edits. */}

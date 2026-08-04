@@ -1,7 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { colors, radii, spacing, textStyles } from '@/theme';
+import { useKeyClick } from '@/lib/audio';
+import { keypadHaptic } from '@/lib/haptics';
+import { colors, fonts, radii, spacing, textStyles } from '@/theme';
 import { ADD, evaluateExpression, MULTIPLY } from './evaluate';
 
 type CalculatorModalProps = {
@@ -34,23 +36,45 @@ export function CalculatorModal({
 
   const total = useMemo(() => evaluateExpression(expression), [expression]);
 
+  const playKeyClick = useKeyClick();
+  // Sharp haptic + dull click on every keypress (client request).
+  const feedback = useCallback(() => {
+    keypadHaptic();
+    playKeyClick();
+  }, [playKeyClick]);
+
   const isOperator = (ch: string) => ch === ADD || ch === MULTIPLY;
 
-  const pressDigit = (d: string) => setExpression((e) => e + d);
+  const pressDigit = (d: string) => {
+    feedback();
+    setExpression((e) => e + d);
+  };
 
-  const pressOperator = (op: string) =>
+  const pressOperator = (op: string) => {
+    feedback();
     setExpression((e) => {
       if (e === '') return e; // no leading operator
       const last = e[e.length - 1];
       if (isOperator(last)) return e.slice(0, -1) + op; // swap consecutive ops
       return e + op;
     });
+  };
 
-  const backspace = () => setExpression((e) => e.slice(0, -1));
-  const clear = () => setExpression('');
+  const backspace = () => {
+    feedback();
+    setExpression((e) => e.slice(0, -1));
+  };
+
+  const clear = () => {
+    feedback();
+    setExpression('');
+  };
 
   const save = () => {
-    if (total != null) onSave(expression, total);
+    if (total != null) {
+      feedback();
+      onSave(expression, total);
+    }
   };
 
   return (
@@ -72,31 +96,32 @@ export function CalculatorModal({
             <Text style={styles.total}>= {total ?? '—'}</Text>
           </View>
 
-          {/* Keypad. */}
+          {/* Keypad — layout per client spec: right column C / ⌫ / ×,
+              bottom row + / 0 / SAVE (double-wide). */}
           <View style={styles.grid}>
             <View style={styles.row}>
               <Key label="7" onPress={() => pressDigit('7')} />
               <Key label="8" onPress={() => pressDigit('8')} />
               <Key label="9" onPress={() => pressDigit('9')} />
-              <Key label={MULTIPLY} variant="op" onPress={() => pressOperator(MULTIPLY)} />
+              <Key label="C" variant="danger" onPress={clear} accessibilityLabel="Clear" />
             </View>
             <View style={styles.row}>
               <Key label="4" onPress={() => pressDigit('4')} />
               <Key label="5" onPress={() => pressDigit('5')} />
               <Key label="6" onPress={() => pressDigit('6')} />
-              <Key label={ADD} variant="op" onPress={() => pressOperator(ADD)} />
+              <Key label="⌫" variant="op" onPress={backspace} accessibilityLabel="Backspace" />
             </View>
             <View style={styles.row}>
               <Key label="1" onPress={() => pressDigit('1')} />
               <Key label="2" onPress={() => pressDigit('2')} />
               <Key label="3" onPress={() => pressDigit('3')} />
-              <Key label="⌫" variant="op" onPress={backspace} accessibilityLabel="Backspace" />
+              <Key label={MULTIPLY} variant="op" onPress={() => pressOperator(MULTIPLY)} />
             </View>
             <View style={styles.row}>
-              <Key label="C" variant="danger" onPress={clear} accessibilityLabel="Clear" />
+              <Key label={ADD} variant="op" onPress={() => pressOperator(ADD)} />
               <Key label="0" onPress={() => pressDigit('0')} />
               <Key
-                label="Save"
+                label="SAVE"
                 variant="save"
                 flex={2}
                 disabled={total == null}
@@ -156,14 +181,16 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(31,32,36,0.45)',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: spacing.xl,
+    // Small outer margin so the keypad fills nearly the full width for the
+    // largest possible tap targets (client request).
+    padding: spacing.sm,
   },
   card: {
     width: '100%',
     backgroundColor: colors.white,
     borderRadius: radii.card,
-    padding: spacing.lg,
-    gap: spacing.md,
+    padding: spacing.sm,
+    gap: spacing.sm,
   },
   title: {
     ...textStyles.sectionLabel,
@@ -174,8 +201,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.grey100,
     borderRadius: radii.button,
     paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    minHeight: 72,
+    paddingVertical: spacing.sm,
+    minHeight: 64,
     justifyContent: 'center',
   },
   expression: {
@@ -196,7 +223,8 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   key: {
-    height: 56,
+    // Tall keys for fast, look-free entry (client request).
+    height: 72,
     borderRadius: radii.button,
     alignItems: 'center',
     justifyContent: 'center',
@@ -208,8 +236,13 @@ const styles = StyleSheet.create({
     opacity: 0.4,
   },
   keyLabel: {
-    ...textStyles.heading,
-    fontSize: 22,
+    // Clean UI font, centred, with generous line height so nothing clips
+    // (Oswald was cropping the tops and rendering ×/+ small).
+    fontFamily: fonts.interBold,
+    fontSize: 30,
+    lineHeight: 40,
+    textAlign: 'center',
+    includeFontPadding: false,
   },
   cancel: {
     alignItems: 'center',
@@ -228,9 +261,10 @@ const keyVariant: Record<KeyVariant, object> = {
   save: { backgroundColor: colors.blue },
 };
 
-const keyLabelVariant: Record<KeyVariant, { color: string }> = {
+const keyLabelVariant: Record<KeyVariant, { color: string; fontSize?: number }> = {
   digit: { color: colors.grey900 },
-  op: { color: colors.blue },
+  // Operators get a larger glyph so × and + read clearly.
+  op: { color: colors.blue, fontSize: 36 },
   danger: { color: colors.danger },
-  save: { color: colors.white },
+  save: { color: colors.white, fontSize: 26 },
 };

@@ -21,11 +21,6 @@ type SessionSync = {
   restoreScan: (item: ScanItem, index: number) => void;
   /** Resolves once all pending writes have flushed (brief Section 8). */
   waitUntilDrained: () => Promise<void>;
-  /**
-   * Clear the active session after an export (brief Section 9, step 5). The
-   * ensure-session effect then creates a fresh active session automatically.
-   */
-  resetForNewSession: () => void;
 };
 
 /**
@@ -148,10 +143,6 @@ export function useSessionSync(): SessionSync {
 
   const waitUntilDrained = useCallback(() => syncQueue.waitUntilDrained(), []);
 
-  const resetForNewSession = useCallback(() => {
-    store.getState().reset();
-  }, [store]);
-
   return {
     status,
     sessionReady: sessionId != null,
@@ -160,6 +151,5 @@ export function useSessionSync(): SessionSync {
     deleteScan,
     restoreScan,
     waitUntilDrained,
-    resetForNewSession,
   };
 }

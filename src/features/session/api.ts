@@ -35,6 +35,21 @@ export async function getOrCreateActiveSession(userId: string): Promise<Session>
 }
 
 /**
+ * Insert a brand-new active session. The `ensure_one_active_session` trigger
+ * completes any previously-active session for the user, so this cleanly starts
+ * a fresh count (client request: reset without exporting).
+ */
+export async function startNewSession(userId: string): Promise<Session> {
+  const { data, error } = await supabase
+    .from('sessions')
+    .insert({ user_id: userId })
+    .select('*')
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+/**
  * Execute a single sync operation. Rejects on failure so the queue can apply
  * backoff. Updates/deletes are naturally idempotent (they affect 0 rows if the
  * row is gone), which keeps retries and out-of-order recovery safe.

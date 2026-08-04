@@ -4,21 +4,18 @@ import { supabase } from '@/lib/supabase';
 export type ExportFormat = 'csv' | 'xlsx';
 
 /**
- * Mark the session complete and record the recipient (brief Section 9, step 2).
- * `exported_at` is intentionally left for the Edge Function to stamp on a
- * successful send.
+ * Record the recipient email on the session so the Edge Function can read it.
+ * The session stays **active** and its scans are kept — exporting no longer ends
+ * the count (client request), so the user returns to their session afterwards
+ * and can re-export or keep adding items.
  */
-export async function markSessionForExport(
+export async function setSessionExportEmail(
   sessionId: string,
   email: string,
 ): Promise<void> {
   const { error } = await supabase
     .from('sessions')
-    .update({
-      status: 'completed',
-      ended_at: new Date().toISOString(),
-      export_email: email,
-    })
+    .update({ export_email: email })
     .eq('id', sessionId);
   if (error) throw error;
 }
