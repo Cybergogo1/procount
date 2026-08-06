@@ -6,11 +6,15 @@ const BEEP_SOURCE = require('../../assets/beep.wav');
 // Soft, dull key-click for the calculator (client request).
 const KEY_SOURCE = require('../../assets/key.wav');
 
+// Scan tone softened a touch per client feedback (0.0–1.0).
+const BEEP_VOLUME = 0.7;
+
 /**
  * Returns a `playBeep()` to fire on a successful scan. Built on expo-audio's
- * useAudioPlayer (SDK 56). We rewind to the start before each play so rapid
- * consecutive scans always retrigger the sound, and configure the audio mode so
- * the beep is heard even when the ringer is muted.
+ * useAudioPlayer (SDK 56). seekTo() is async, so we AWAIT the rewind before
+ * calling play() — firing play() before the seek landed was leaving the player
+ * parked at the end and swallowing every other beep. We also configure the
+ * audio mode so the beep is heard even when the ringer is muted.
  */
 export function useScanBeep(): () => void {
   const player = useAudioPlayer(BEEP_SOURCE);
@@ -21,9 +25,13 @@ export function useScanBeep(): () => void {
     void setAudioModeAsync({ playsInSilentMode: true }).catch(() => {});
   }, []);
 
-  return useCallback(() => {
+  useEffect(() => {
+    player.volume = BEEP_VOLUME;
+  }, [player]);
+
+  return useCallback(async () => {
     try {
-      player.seekTo(0);
+      await player.seekTo(0);
       player.play();
     } catch {
       // Audio is non-essential feedback — never block the scan loop.
@@ -32,15 +40,16 @@ export function useScanBeep(): () => void {
 }
 
 /**
- * Returns a `playKeyClick()` for calculator keypresses (client request). Rewinds
- * before each play so fast entry always retriggers the soft click.
+ * Returns a `playKeyClick()` for calculator keypresses (client request). Same
+ * awaited-rewind pattern so fast entry retriggers the soft click every time
+ * (an un-awaited seek was dropping every other click).
  */
 export function useKeyClick(): () => void {
   const player = useAudioPlayer(KEY_SOURCE);
 
-  return useCallback(() => {
+  return useCallback(async () => {
     try {
-      player.seekTo(0);
+      await player.seekTo(0);
       player.play();
     } catch {
       // Non-essential feedback — never block key entry.

@@ -20,7 +20,7 @@ import { useSubscription } from '@/features/subscription/SubscriptionProvider';
 import { useAccess } from '@/features/subscription/useAccess';
 import { colors, radii, spacing, textStyles } from '@/theme';
 
-const SUPPORT_EMAIL = 'support@procount.app';
+const SUPPORT_EMAIL = 'apps@procountusa.com';
 const MANAGE_URL = Platform.select({
   ios: 'https://apps.apple.com/account/subscriptions',
   android: 'https://play.google.com/store/account/subscriptions',
