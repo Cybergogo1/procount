@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase';
+import type { ScanItem } from '@/stores/useSessionStore';
 import type { Session } from '@/types/database';
 import type { SyncOp } from './types';
 
@@ -47,6 +48,27 @@ export async function startNewSession(userId: string): Promise<Session> {
     .single();
   if (error) throw error;
   return data;
+}
+
+/**
+ * Load an active session's scans so the on-screen list survives an app restart
+ * (client request: the list persists until explicitly reset). Newest first, to
+ * match how the store keeps them.
+ */
+export async function getSessionScans(sessionId: string): Promise<ScanItem[]> {
+  const { data, error } = await supabase
+    .from('scans')
+    .select('id, barcode, quantity, expression, scanned_at')
+    .eq('session_id', sessionId)
+    .order('scanned_at', { ascending: false });
+  if (error) throw error;
+  return (data ?? []).map((row) => ({
+    id: row.id,
+    barcode: row.barcode,
+    quantity: row.quantity,
+    expression: row.expression ?? String(row.quantity),
+    scannedAt: row.scanned_at,
+  }));
 }
 
 /**

@@ -46,6 +46,9 @@ function subscriptionLabel(access: ReturnType<typeof useAccess>): string {
 export default function SettingsScreen() {
   const router = useRouter();
   const { user } = useAuth();
+  // Day-one users run on an invisible anonymous account (no login screen), so
+  // there's no email to show and signing out would strand them — hide both.
+  const isAnonymous = user?.is_anonymous ?? false;
   const access = useAccess();
   const { restore } = useSubscription();
   const [signingOut, setSigningOut] = useState(false);
@@ -112,7 +115,7 @@ export default function SettingsScreen() {
       </View>
 
       <View style={styles.list}>
-        <Row label="Account" value={user?.email ?? '—'} />
+        <Row label="Account" value={isAnonymous ? 'Guest' : user?.email ?? '—'} />
         <Row label="Subscription" value={subscriptionLabel(access)} />
         {/* Reachable while on trial so users (and testers) can subscribe early. */}
         {!access.hasActiveSubscription && (
@@ -131,8 +134,11 @@ export default function SettingsScreen() {
         <ActionRow
           label="Contact support"
           onPress={() => Linking.openURL(`mailto:${SUPPORT_EMAIL}`)}
+          last={isAnonymous}
         />
-        <ActionRow label="Sign out" destructive onPress={handleSignOut} last />
+        {!isAnonymous && (
+          <ActionRow label="Sign out" destructive onPress={handleSignOut} last />
+        )}
       </View>
 
       {signingOut && <Text style={styles.signingOut}>Signing out…</Text>}

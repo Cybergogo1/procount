@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useAuth } from '@/features/auth/AuthProvider';
 import { useSessionStore, type ScanItem } from '@/stores/useSessionStore';
-import { getOrCreateActiveSession } from './api';
+import { getOrCreateActiveSession, getSessionScans } from './api';
 import { bindConnectivity, syncQueue } from './queueInstance';
 import type { SyncStatus } from './types';
 
@@ -68,6 +68,27 @@ export function useSessionSync(): SessionSync {
       if (retry) clearTimeout(retry);
     };
   }, [user, sessionId, setSessionId]);
+
+  // Load the active session's scans once it's known, so the on-screen list
+  // survives an app restart (client request). Only populates when the list is
+  // empty, so it never clobbers scans the user is actively adding.
+  const loadedSessionRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!sessionId || loadedSessionRef.current === sessionId) return;
+    loadedSessionRef.current = sessionId;
+    let cancelled = false;
+    getSessionScans(sessionId)
+      .then((scans) => {
+        if (cancelled || scans.length === 0) return;
+        useSessionStore.setState((s) => (s.scans.length === 0 ? { scans } : {}));
+      })
+      .catch(() => {
+        // Non-fatal — the list just starts empty; scans still sync normally.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionId]);
 
   const store = useSessionStore;
 
