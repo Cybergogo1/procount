@@ -277,19 +277,23 @@ export default function ScannerScreen() {
           />
         </CameraPermissionGate>
 
-        {/* Scan-mode toggle (client request). The label shows the mode you'll
-            switch TO: "QR" while scanning barcodes, "Barcode" while in QR. */}
+        {/* Scan-mode toggle (client request). The label shows the mode you're
+            CURRENTLY in — "Barcode" means it's scanning barcodes — with a hint
+            that tapping switches. */}
         <Pressable
           onPress={toggleScanMode}
           style={styles.scanModeToggle}
           accessibilityRole="button"
-          accessibilityLabel={`Switch to ${
+          accessibilityLabel={`Scan mode: ${
+            scanMode === 'barcode' ? 'barcode' : 'QR code'
+          }. Tap to switch to ${
             scanMode === 'barcode' ? 'QR code' : 'barcode'
-          } scanning`}
+          }.`}
         >
           <Text style={styles.scanModeText}>
-            ⇄ {scanMode === 'barcode' ? 'QR' : 'Barcode'}
+            {scanMode === 'barcode' ? 'Barcode' : 'QR'}
           </Text>
+          <Text style={styles.scanModeHint}>tap to switch</Text>
         </Pressable>
 
         {pendingBarcode != null && (
@@ -518,13 +522,19 @@ const styles = StyleSheet.create({
     right: spacing.sm,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs,
-    borderRadius: radii.pill,
+    borderRadius: radii.button,
     backgroundColor: 'rgba(0,0,0,0.6)',
+    alignItems: 'center',
   },
   scanModeText: {
     ...textStyles.bodyMedium,
     color: colors.white,
-    fontSize: 14,
+    fontSize: 15,
+  },
+  scanModeHint: {
+    ...textStyles.caption,
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 10,
   },
   pendingBarcode: {
     ...textStyles.caption,
