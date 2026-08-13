@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { useKeyClick } from '@/lib/audio';
 import { keypadHaptic } from '@/lib/haptics';
 import { colors, fonts, radii, spacing, textStyles } from '@/theme';
 import { ADD, evaluateExpression, MULTIPLY } from './evaluate';
@@ -36,12 +35,11 @@ export function CalculatorModal({
 
   const total = useMemo(() => evaluateExpression(expression), [expression]);
 
-  const playKeyClick = useKeyClick();
-  // Sharp haptic + dull click on every keypress (client request).
+  // Sharp haptic on every keypress. Key sound removed per client request —
+  // vibration only on the keypad; the scan confirmation ding is unaffected.
   const feedback = useCallback(() => {
     keypadHaptic();
-    playKeyClick();
-  }, [playKeyClick]);
+  }, []);
 
   const isOperator = (ch: string) => ch === ADD || ch === MULTIPLY;
 

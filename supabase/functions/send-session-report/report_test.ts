@@ -113,6 +113,23 @@ Deno.test('reportSubject: human-readable date in the zone', () => {
   );
 });
 
+Deno.test('reportSubject: includes the session name when named', () => {
+  assertEquals(
+    reportSubject(new Date('2026-06-16T12:00:00.000Z'), 'UTC', 'Aisle 4'),
+    'ProCount session — Aisle 4 — 16 Jun 2026',
+  );
+});
+
+Deno.test('buildReport: names the file from the session name (slugified)', () => {
+  const report = buildReport(SCANS, 'xlsx', {
+    timeZone: 'UTC',
+    date: new Date('2026-06-16T12:00:00.000Z'),
+    combine: false,
+    name: 'Back Stockroom #2',
+  });
+  assertEquals(report.filename, 'procount-back-stockroom-2-2026-06-16.xlsx');
+});
+
 Deno.test('deliverReport: separated send shape', async () => {
   const sent: EmailMessage[] = [];
   await deliverReport({

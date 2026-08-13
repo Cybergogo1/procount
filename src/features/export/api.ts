@@ -4,18 +4,20 @@ import { supabase } from '@/lib/supabase';
 export type ExportFormat = 'csv' | 'xlsx';
 
 /**
- * Record the recipient email on the session so the Edge Function can read it.
- * The session stays **active** and its scans are kept — exporting no longer ends
- * the count (client request), so the user returns to their session afterwards
- * and can re-export or keep adding items.
+ * Record the recipient email (and optional session name) on the session so the
+ * Edge Function can read them. The session stays **active** and its scans are
+ * kept — exporting no longer ends the count (client request), so the user
+ * returns to their session afterwards and can re-export or keep adding items.
  */
-export async function setSessionExportEmail(
+export async function setSessionExportDetails(
   sessionId: string,
   email: string,
+  name?: string | null,
 ): Promise<void> {
+  const trimmed = name?.trim();
   const { error } = await supabase
     .from('sessions')
-    .update({ export_email: email })
+    .update({ export_email: email, name: trimmed ? trimmed : null })
     .eq('id', sessionId);
   if (error) throw error;
 }

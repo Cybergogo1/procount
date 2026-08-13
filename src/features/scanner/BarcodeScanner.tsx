@@ -14,12 +14,20 @@ type BarcodeScannerProps = {
   /** When false the scanner is paused (brief Section 7: pause after a read). */
   active: boolean;
   onScan: (barcode: string) => void;
+  /** Which symbologies to detect. Defaults to the retail barcode set. */
+  barcodeTypes?: BarcodeType[];
+  /**
+   * When set (> 0), the scanner re-arms itself this many ms after a read so it
+   * keeps scanning continuously — used by Auto-1 rapid-fire mode. The cooldown
+   * stops the same code being counted repeatedly while it sits in frame.
+   */
+  autoRearmMs?: number;
   style?: StyleProp<ViewStyle>;
 };
 
-// Retail product symbologies plus common fallbacks. QR/aztec etc. are left out
-// to avoid counting non-product codes during a stock count.
-const BARCODE_TYPES: BarcodeType[] = [
+// Retail product symbologies plus common fallbacks (default mode). QR/aztec etc.
+// are left out so a stock count doesn't pick up non-product codes.
+export const BARCODE_TYPES: BarcodeType[] = [
   'ean13',
   'ean8',
   'upc_a',
@@ -31,30 +39,71 @@ const BARCODE_TYPES: BarcodeType[] = [
   'codabar',
 ];
 
+// QR mode (client request): a dedicated toggle narrows detection to QR codes.
+export const QR_TYPES: BarcodeType[] = ['qr'];
+
 /**
  * Live barcode scanner (brief Section 7.3). The camera runs continuously; when
  * `active` is false we stop handling reads and dim the viewfinder. On a
  * successful read we fire the success haptic + beep and bubble the value up via
  * onScan — the parent parks it as the pending scan and flips `active` to false.
  */
-export function BarcodeScanner({ active, onScan, style }: BarcodeScannerProps) {
+export function BarcodeScanner({
+  active,
+  onScan,
+  barcodeTypes = BARCODE_TYPES,
+  autoRearmMs,
+  style,
+}: BarcodeScannerProps) {
   const playBeep = useScanBeep();
   // Guards against expo-camera firing onBarcodeScanned several times for the
   // same frame before the parent re-renders to pause us.
   const lockRef = useRef(false);
+  const lastDataRef = useRef<string | null>(null);
+  const rearmTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   useEffect(() => {
-    // Re-arm the lock whenever scanning resumes.
+    // Re-arm the lock whenever scanning resumes, and drop any pending cooldown.
     if (active) lockRef.current = false;
+    if (rearmTimer.current) {
+      clearTimeout(rearmTimer.current);
+      rearmTimer.current = undefined;
+    }
   }, [active]);
 
+  // Clean up the cooldown timer on unmount.
+  useEffect(
+    () => () => {
+      if (rearmTimer.current) clearTimeout(rearmTimer.current);
+    },
+    [],
+  );
+
   const handleBarcode = (result: BarcodeScanningResult) => {
-    if (lockRef.current) return;
+    const continuous = !!autoRearmMs && autoRearmMs > 0;
+
+    if (lockRef.current) {
+      // In rapid-fire, a *different* code means a new item — let it through
+      // immediately; only repeats of the same code wait out the cooldown so one
+      // item lingering in frame isn't counted over and over.
+      if (!continuous || result.data === lastDataRef.current) return;
+    }
+
     lockRef.current = true;
+    lastDataRef.current = result.data;
 
     scanSuccessHaptic();
     playBeep();
     onScan(result.data);
+
+    // Auto-1 rapid-fire: re-arm after a short cooldown so the next item can be
+    // read without a manual Confirm.
+    if (continuous) {
+      if (rearmTimer.current) clearTimeout(rearmTimer.current);
+      rearmTimer.current = setTimeout(() => {
+        lockRef.current = false;
+      }, autoRearmMs);
+    }
   };
 
   return (
@@ -62,7 +111,7 @@ export function BarcodeScanner({ active, onScan, style }: BarcodeScannerProps) {
       <CameraView
         style={StyleSheet.absoluteFill}
         facing="back"
-        barcodeScannerSettings={{ barcodeTypes: BARCODE_TYPES }}
+        barcodeScannerSettings={{ barcodeTypes }}
         onBarcodeScanned={active ? handleBarcode : undefined}
       />
 

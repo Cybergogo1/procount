@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Redirect, useRouter } from 'expo-router';
 import {
   ActivityIndicator,
@@ -18,7 +18,11 @@ import { Toast } from '@/components/Toast';
 import { UndoToast } from '@/components/UndoToast';
 import { CalculatorModal } from '@/features/calculator/CalculatorModal';
 import { EndSessionSheet } from '@/features/export/EndSessionSheet';
-import { BarcodeScanner } from '@/features/scanner/BarcodeScanner';
+import {
+  BarcodeScanner,
+  BARCODE_TYPES,
+  QR_TYPES,
+} from '@/features/scanner/BarcodeScanner';
 import { CameraPermissionGate } from '@/features/scanner/CameraPermissionGate';
 import { useSessionSync } from '@/features/session/useSessionSync';
 import { useAccess } from '@/features/subscription/useAccess';
@@ -29,6 +33,10 @@ import {
   type ScanItem,
 } from '@/stores/useSessionStore';
 import { colors, radii, spacing, textStyles } from '@/theme';
+
+// Auto-1 cooldown between reads (ms) — long enough that a code lingering in
+// frame isn't double-counted, short enough for brisk item-to-item scanning.
+const AUTO1_COOLDOWN_MS = 800;
 
 /**
  * Scanner (Home) — brief Section 7. Live Zustand store + expo-camera barcode
@@ -66,6 +74,27 @@ export default function ScannerScreen() {
   const [exportOpen, setExportOpen] = useState(false);
   const [exportSuccess, setExportSuccess] = useState(false);
 
+  // Client scanning modes (feedback round 3):
+  //  - Auto-1: each read commits qty 1 and stays live for rapid-fire counting.
+  //  - Scan mode: toggle the camera between retail barcodes and QR codes.
+  const [auto1, setAuto1] = useState(false);
+  const [scanMode, setScanMode] = useState<'barcode' | 'qr'>('barcode');
+
+  // Live values for the scan callback, held in refs so the camera handler never
+  // goes stale (and we don't re-subscribe the scanner on every render).
+  const auto1Ref = useRef(auto1);
+  const sessionReadyRef = useRef(sessionReady);
+  const addScanRef = useRef(addScan);
+  useEffect(() => {
+    auto1Ref.current = auto1;
+  }, [auto1]);
+  useEffect(() => {
+    sessionReadyRef.current = sessionReady;
+  }, [sessionReady]);
+  useEffect(() => {
+    addScanRef.current = addScan;
+  }, [addScan]);
+
   // Calculator dialog: 'new' builds the pending count, 'edit' edits a line.
   const [calc, setCalc] = useState<
     { mode: 'new' } | { mode: 'edit'; scan: ScanItem } | null
@@ -82,14 +111,19 @@ export default function ScannerScreen() {
     }
   }, []);
 
-  const handleScanned = useCallback(
-    (barcode: string) => {
-      // The camera is paused by the parent once a barcode is pending, but guard
-      // here too against an in-flight read landing after pause.
-      setPendingBarcode((current) => current ?? barcode);
-    },
-    [],
-  );
+  const handleScanned = useCallback((barcode: string) => {
+    if (auto1Ref.current) {
+      // Auto-1 rapid-fire: commit qty 1 immediately and stay live for the next
+      // item. BarcodeScanner's cooldown stops the same code counting twice.
+      if (sessionReadyRef.current) {
+        addScanRef.current({ barcode, quantity: 1, expression: '1' });
+      }
+      return;
+    }
+    // Normal mode: park the barcode; the camera pauses until the user confirms.
+    // Guard against an in-flight read landing after pause.
+    setPendingBarcode((current) => current ?? barcode);
+  }, []);
 
   // Pop the calculator open as soon as a barcode is parked (client request:
   // scan → count). Cancelling it falls back to the +/- stepper.
@@ -126,6 +160,20 @@ export default function ScannerScreen() {
 
   // Discard a parked scan (e.g. scanned by mistake) without committing.
   const cancelScan = () => resetPending();
+
+  // Toggle Auto-1. Turning it on clears any parked scan and closes the
+  // calculator so continuous scanning starts cleanly.
+  const toggleAuto1 = () => {
+    const next = !auto1;
+    setAuto1(next);
+    if (next) {
+      resetPending();
+      setCalc(null);
+    }
+  };
+
+  const toggleScanMode = () =>
+    setScanMode((m) => (m === 'barcode' ? 'qr' : 'barcode'));
 
   const handleCalcSave = (expression: string, total: number) => {
     if (calc?.mode === 'edit') {
@@ -186,6 +234,11 @@ export default function ScannerScreen() {
     );
   }
 
+  // Pause the camera while a scan is parked, the calculator is up, or the export
+  // sheet is open (so nothing is counted behind a modal). Auto-1 keeps it live.
+  const scannerActive = pendingBarcode == null && !exportOpen && calc == null;
+  const barcodeTypes = scanMode === 'qr' ? QR_TYPES : BARCODE_TYPES;
+
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
       {/* Top bar (brief Section 7.1). */}
@@ -216,11 +269,28 @@ export default function ScannerScreen() {
       <View style={styles.viewfinder}>
         <CameraPermissionGate>
           <BarcodeScanner
-            active={pendingBarcode == null}
+            active={scannerActive}
             onScan={handleScanned}
+            barcodeTypes={barcodeTypes}
+            autoRearmMs={auto1 ? AUTO1_COOLDOWN_MS : undefined}
             style={StyleSheet.absoluteFill}
           />
         </CameraPermissionGate>
+
+        {/* Scan-mode toggle (client request). The label shows the mode you'll
+            switch TO: "QR" while scanning barcodes, "Barcode" while in QR. */}
+        <Pressable
+          onPress={toggleScanMode}
+          style={styles.scanModeToggle}
+          accessibilityRole="button"
+          accessibilityLabel={`Switch to ${
+            scanMode === 'barcode' ? 'QR code' : 'barcode'
+          } scanning`}
+        >
+          <Text style={styles.scanModeText}>
+            ⇄ {scanMode === 'barcode' ? 'QR' : 'Barcode'}
+          </Text>
+        </Pressable>
 
         {pendingBarcode != null && (
           <View style={styles.pendingBadge} pointerEvents="none">
@@ -241,46 +311,72 @@ export default function ScannerScreen() {
       </View>
 
       {/* Quantity + Confirm (brief Section 7.4–7.5). Calculator button opens the
-          +/× count calculator for complex stacks (client request). */}
+          +/× count calculator for complex stacks (client request). Auto-1
+          (client request) skips all of this and counts 1 per scan. */}
       <View style={styles.controls}>
-        <View style={styles.quantityRow}>
-          <View style={styles.quantityControls}>
-            <QuantityControls value={quantity} onChange={setQuantityManual} />
-          </View>
+        {/* Auto-1 rapid-fire toggle (left). */}
+        <View style={styles.toggleRow}>
           <Pressable
-            style={styles.calcButton}
-            onPress={() => setCalc({ mode: 'new' })}
-            accessibilityRole="button"
-            accessibilityLabel="Open calculator"
+            onPress={toggleAuto1}
+            style={[styles.auto1, auto1 && styles.auto1On]}
+            accessibilityRole="switch"
+            accessibilityState={{ checked: auto1 }}
+            accessibilityLabel="Auto-1 rapid scanning"
           >
-            <Text style={styles.calcButtonIcon}>🧮</Text>
+            <Text style={[styles.auto1Label, auto1 && styles.auto1LabelOn]}>
+              ⚡ Auto-1 {auto1 ? 'ON' : 'OFF'}
+            </Text>
           </Pressable>
+          {auto1 && (
+            <Text style={styles.auto1Hint} numberOfLines={2}>
+              Each scan adds 1 — just keep scanning.
+            </Text>
+          )}
         </View>
-        {/* Show the working when the count came from the calculator. */}
-        {/\d[+×]/.test(pendingExpression) && (
-          <Text style={styles.expressionHint} numberOfLines={1}>
-            {pendingExpression} = {quantity}
-          </Text>
-        )}
-        {pendingBarcode == null ? (
-          <Button label="Scan an item to count" large disabled onPress={confirmScan} />
-        ) : (
-          <View style={styles.confirmRow}>
-            <Button
-              label="Cancel"
-              variant="secondary"
-              large
-              onPress={cancelScan}
-              style={styles.cancelButton}
-            />
-            <Button
-              label={sessionReady ? 'Confirm' : 'Connecting…'}
-              large
-              onPress={confirmScan}
-              disabled={!sessionReady}
-              style={styles.confirmButton}
-            />
-          </View>
+
+        {/* Manual counting controls — hidden in Auto-1 mode. */}
+        {!auto1 && (
+          <>
+            <View style={styles.quantityRow}>
+              <View style={styles.quantityControls}>
+                <QuantityControls value={quantity} onChange={setQuantityManual} />
+              </View>
+              <Pressable
+                style={styles.calcButton}
+                onPress={() => setCalc({ mode: 'new' })}
+                accessibilityRole="button"
+                accessibilityLabel="Open calculator"
+              >
+                <Text style={styles.calcButtonIcon}>🧮</Text>
+              </Pressable>
+            </View>
+            {/* Show the working when the count came from the calculator. */}
+            {/\d[+×]/.test(pendingExpression) && (
+              <Text style={styles.expressionHint} numberOfLines={1}>
+                {pendingExpression} = {quantity}
+              </Text>
+            )}
+            {pendingBarcode == null ? (
+              <Button label="Scan an item to count" large disabled onPress={confirmScan} />
+            ) : (
+              <View style={styles.confirmRow}>
+                <Button
+                  label="Cancel"
+                  variant="secondary"
+                  large
+                  onPress={cancelScan}
+                  style={styles.cancelButton}
+                />
+                <Button
+                  label={sessionReady ? 'Confirm' : 'Connecting…'}
+                  large
+                  onPress={confirmScan}
+                  disabled={!sessionReady}
+                  style={styles.confirmButton}
+                />
+              </View>
+            )}
+          </>
         )}
       </View>
 
@@ -416,6 +512,20 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
     backgroundColor: 'rgba(0,0,0,0.55)',
   },
+  scanModeToggle: {
+    position: 'absolute',
+    top: spacing.sm,
+    right: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: radii.pill,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+  },
+  scanModeText: {
+    ...textStyles.bodyMedium,
+    color: colors.white,
+    fontSize: 14,
+  },
   pendingBarcode: {
     ...textStyles.caption,
     color: colors.white,
@@ -438,6 +548,37 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xl,
     paddingVertical: spacing.lg,
     gap: spacing.md,
+  },
+  toggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+  },
+  auto1: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 44,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radii.button,
+    borderWidth: 1.5,
+    borderColor: colors.grey300,
+    backgroundColor: colors.white,
+  },
+  auto1On: {
+    borderColor: colors.blue,
+    backgroundColor: colors.blueTint,
+  },
+  auto1Label: {
+    ...textStyles.bodyMedium,
+    color: colors.grey700,
+  },
+  auto1LabelOn: {
+    color: colors.blue,
+  },
+  auto1Hint: {
+    ...textStyles.caption,
+    color: colors.grey500,
+    flex: 1,
   },
   quantityRow: {
     flexDirection: 'row',

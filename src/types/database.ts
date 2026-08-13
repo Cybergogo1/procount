@@ -44,6 +44,7 @@ export type Database = {
           id: string;
           user_id: string;
           status: SessionStatus;
+          name: string | null;
           started_at: string;
           ended_at: string | null;
           export_email: string | null;
@@ -54,6 +55,7 @@ export type Database = {
           id?: string;
           user_id: string;
           status?: SessionStatus;
+          name?: string | null;
           started_at?: string;
           ended_at?: string | null;
           export_email?: string | null;
@@ -64,6 +66,7 @@ export type Database = {
           id?: string;
           user_id?: string;
           status?: SessionStatus;
+          name?: string | null;
           started_at?: string;
           ended_at?: string | null;
           export_email?: string | null;

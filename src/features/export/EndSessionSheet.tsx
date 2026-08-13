@@ -16,7 +16,7 @@ import { TextField } from '@/components/TextField';
 import { colors, radii, spacing, textStyles } from '@/theme';
 import {
   requestSessionReport,
-  setSessionExportEmail,
+  setSessionExportDetails,
   type ExportFormat,
 } from './api';
 
@@ -47,6 +47,7 @@ export function EndSessionSheet({
   onSent,
 }: EndSessionSheetProps) {
   const [email, setEmail] = useState('');
+  const [name, setName] = useState('');
   const [format, setFormat] = useState<ExportFormat>('xlsx');
   // Default to separated (every scan, one row) — the raw count is source of
   // truth; combining like items is the optional summary view.
@@ -56,6 +57,7 @@ export function EndSessionSheet({
 
   const reset = () => {
     setEmail('');
+    setName('');
     setFormat('xlsx');
     setCombine(false);
     setError(null);
@@ -81,7 +83,7 @@ export function EndSessionSheet({
     setSending(true);
     setError(null);
     try {
-      await setSessionExportEmail(sessionId, parsed.data);
+      await setSessionExportDetails(sessionId, parsed.data, name);
       await requestSessionReport(sessionId, format, combine);
       reset();
       onSent();
@@ -129,6 +131,16 @@ export function EndSessionSheet({
               textContentType="emailAddress"
               placeholder="name@store.com"
               editable={!sending}
+            />
+
+            <TextField
+              label="Session name (optional)"
+              value={name}
+              onChangeText={setName}
+              autoCapitalize="words"
+              placeholder="e.g. Aisle 4, Back stockroom"
+              editable={!sending}
+              returnKeyType="done"
             />
 
             <View style={styles.fieldGroup}>

@@ -144,25 +144,38 @@ function matrixToXlsx(matrix: Matrix): Uint8Array {
   return new Uint8Array(XLSX.write(workbook, { type: 'array', bookType: 'xlsx' }));
 }
 
+/** Filename-safe slug from a session name: lowercase, dashes, capped length. */
+export function fileSlug(name?: string | null): string {
+  if (!name) return '';
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40);
+}
+
 /** Build the attachment for the requested format and layout. */
 export function buildReport(
   scans: ReportScan[],
   format: ReportFormat,
-  opts: { timeZone: string; date: Date; combine: boolean },
+  opts: { timeZone: string; date: Date; combine: boolean; name?: string | null },
 ): GeneratedReport {
   const matrix = buildMatrix(scans, opts.timeZone, opts.combine);
   const stamp = localDateStamp(opts.date, opts.timeZone);
+  const slug = fileSlug(opts.name);
+  const base = slug ? `procount-${slug}-${stamp}` : `procount-${stamp}`;
 
   if (format === 'csv') {
     return {
-      filename: `procount-${stamp}.csv`,
+      filename: `${base}.csv`,
       contentType: 'text/csv',
       base64: encodeBase64(new TextEncoder().encode(matrixToCsv(matrix))),
     };
   }
 
   return {
-    filename: `procount-${stamp}.xlsx`,
+    filename: `${base}.xlsx`,
     contentType:
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     base64: encodeBase64(matrixToXlsx(matrix)),

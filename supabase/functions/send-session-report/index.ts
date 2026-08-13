@@ -82,7 +82,7 @@ Deno.serve(async (req) => {
 
   const sessionResult = await supabase
     .from('sessions')
-    .select('id, export_email, ended_at')
+    .select('id, export_email, ended_at, name')
     .eq('id', sessionId)
     .single();
 
@@ -93,6 +93,7 @@ Deno.serve(async (req) => {
     id: string;
     export_email: string | null;
     ended_at: string | null;
+    name: string | null;
   };
 
   if (!session.export_email) {
@@ -125,6 +126,7 @@ Deno.serve(async (req) => {
       date: session.ended_at ? new Date(session.ended_at) : new Date(),
       timeZone,
       combine,
+      sessionName: session.name,
       send: resendSender(apiKey),
     });
   } catch (err) {
