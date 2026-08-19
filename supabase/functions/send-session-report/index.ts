@@ -100,16 +100,29 @@ Deno.serve(async (req) => {
     return json({ error: 'Session has no export email set' }, 400);
   }
 
-  const scansResult = await supabase
-    .from('scans')
-    .select('barcode, quantity, expression, scanned_at')
-    .eq('session_id', sessionId)
-    .order('scanned_at', { ascending: true });
+  // Page through every scan. PostgREST caps a single response at ~1000 rows
+  // (the project's "Max rows" setting), so a big count would otherwise be
+  // truncated (client-reported). We fetch in ordered pages until a short page
+  // signals the end. Ordering by (scanned_at, id) is a total order so pages
+  // never overlap or skip rows when timestamps tie.
+  const PAGE_SIZE = 1000;
+  const scans: ReportScan[] = [];
+  for (let from = 0; ; from += PAGE_SIZE) {
+    const page = await supabase
+      .from('scans')
+      .select('barcode, quantity, expression, scanned_at')
+      .eq('session_id', sessionId)
+      .order('scanned_at', { ascending: true })
+      .order('id', { ascending: true })
+      .range(from, from + PAGE_SIZE - 1);
 
-  if (scansResult.error) {
-    return json({ error: 'Could not load scans' }, 500);
+    if (page.error) {
+      return json({ error: 'Could not load scans' }, 500);
+    }
+    const rows = (page.data ?? []) as ReportScan[];
+    scans.push(...rows);
+    if (rows.length < PAGE_SIZE) break;
   }
-  const scans = (scansResult.data ?? []) as ReportScan[];
 
   const apiKey = Deno.env.get('RESEND_API_KEY');
   if (!apiKey) {

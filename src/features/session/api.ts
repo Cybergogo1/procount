@@ -56,19 +56,34 @@ export async function startNewSession(userId: string): Promise<Session> {
  * match how the store keeps them.
  */
 export async function getSessionScans(sessionId: string): Promise<ScanItem[]> {
-  const { data, error } = await supabase
-    .from('scans')
-    .select('id, barcode, quantity, expression, scanned_at')
-    .eq('session_id', sessionId)
-    .order('scanned_at', { ascending: false });
-  if (error) throw error;
-  return (data ?? []).map((row) => ({
-    id: row.id,
-    barcode: row.barcode,
-    quantity: row.quantity,
-    expression: row.expression ?? String(row.quantity),
-    scannedAt: row.scanned_at,
-  }));
+  // Page through every scan — PostgREST caps a single response at ~1000 rows,
+  // so a big count would otherwise reload only the first page (client-reported
+  // for the export; the same cap applies here). Newest first for the list;
+  // (scanned_at, id) is a total order so pages don't overlap or skip.
+  const PAGE_SIZE = 1000;
+  const items: ScanItem[] = [];
+  for (let from = 0; ; from += PAGE_SIZE) {
+    const { data, error } = await supabase
+      .from('scans')
+      .select('id, barcode, quantity, expression, scanned_at')
+      .eq('session_id', sessionId)
+      .order('scanned_at', { ascending: false })
+      .order('id', { ascending: false })
+      .range(from, from + PAGE_SIZE - 1);
+    if (error) throw error;
+    const rows = data ?? [];
+    for (const row of rows) {
+      items.push({
+        id: row.id,
+        barcode: row.barcode,
+        quantity: row.quantity,
+        expression: row.expression ?? String(row.quantity),
+        scannedAt: row.scanned_at,
+      });
+    }
+    if (rows.length < PAGE_SIZE) break;
+  }
+  return items;
 }
 
 /**
