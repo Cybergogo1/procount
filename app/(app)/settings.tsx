@@ -6,6 +6,7 @@ import {
   Platform,
   Pressable,
   StyleSheet,
+  Switch,
   Text,
   View,
 } from 'react-native';
@@ -18,6 +19,7 @@ import { useAuth } from '@/features/auth/AuthProvider';
 import { startNewCount } from '@/features/session/startNewCount';
 import { useSubscription } from '@/features/subscription/SubscriptionProvider';
 import { useAccess } from '@/features/subscription/useAccess';
+import { useSettingsStore } from '@/stores/useSettingsStore';
 import { colors, radii, spacing, textStyles } from '@/theme';
 
 const SUPPORT_EMAIL = 'apps@procountusa.com';
@@ -51,6 +53,8 @@ export default function SettingsScreen() {
   const isAnonymous = user?.is_anonymous ?? false;
   const access = useAccess();
   const { restore } = useSubscription();
+  const scanMode = useSettingsStore((s) => s.scanMode);
+  const setScanMode = useSettingsStore((s) => s.setScanMode);
   const [signingOut, setSigningOut] = useState(false);
   const [restoring, setRestoring] = useState(false);
 
@@ -125,6 +129,12 @@ export default function SettingsScreen() {
           />
         )}
         <ActionRow label="Start new count" onPress={handleNewCount} />
+        <SwitchRow
+          label="Scan QR codes"
+          hint="Off scans standard barcodes"
+          value={scanMode === 'qr'}
+          onValueChange={(on) => setScanMode(on ? 'qr' : 'barcode')}
+        />
         <ActionRow label="Manage subscription" onPress={handleManage} />
         <ActionRow
           label={restoring ? 'Restoring…' : 'Restore purchases'}
@@ -194,6 +204,33 @@ function ActionRow({
   );
 }
 
+function SwitchRow({
+  label,
+  hint,
+  value,
+  onValueChange,
+}: {
+  label: string;
+  hint?: string;
+  value: boolean;
+  onValueChange: (value: boolean) => void;
+}) {
+  return (
+    <View style={styles.row}>
+      <View style={styles.switchLabel}>
+        <Text style={styles.rowLabel}>{label}</Text>
+        {hint != null && <Text style={styles.switchHint}>{hint}</Text>}
+      </View>
+      <Switch
+        value={value}
+        onValueChange={onValueChange}
+        trackColor={{ true: colors.blue, false: colors.grey300 }}
+        accessibilityLabel={label}
+      />
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
@@ -233,6 +270,14 @@ const styles = StyleSheet.create({
   rowLabel: {
     ...textStyles.bodyMedium,
     color: colors.grey900,
+  },
+  switchLabel: {
+    flex: 1,
+    gap: 2,
+  },
+  switchHint: {
+    ...textStyles.caption,
+    color: colors.grey500,
   },
   rowValue: {
     ...textStyles.body,

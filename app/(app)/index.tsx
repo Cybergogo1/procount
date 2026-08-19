@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Redirect, useRouter } from 'expo-router';
+import { Redirect, useFocusEffect, useRouter } from 'expo-router';
 import {
   ActivityIndicator,
   FlatList,
@@ -11,7 +11,6 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/Button';
-import { QuantityControls } from '@/components/QuantityControls';
 import { ScanRow } from '@/components/ScanRow';
 import { SyncStatusBadge } from '@/components/SyncStatusBadge';
 import { Toast } from '@/components/Toast';
@@ -27,6 +26,7 @@ import { CameraPermissionGate } from '@/features/scanner/CameraPermissionGate';
 import { useSessionSync } from '@/features/session/useSessionSync';
 import { useAccess } from '@/features/subscription/useAccess';
 import { maybeRequestReviewAfterExport } from '@/lib/review';
+import { useSettingsStore } from '@/stores/useSettingsStore';
 import {
   useSessionStore,
   useTotalCount,
@@ -38,6 +38,10 @@ import { colors, radii, spacing, textStyles } from '@/theme';
 // frame isn't double-counted, short enough for brisk item-to-item scanning.
 const AUTO1_COOLDOWN_MS = 800;
 
+// How many recent scans the main screen previews before "View all" (client
+// request: main = short preview, the full searchable list lives on its own screen).
+const RECENT_PREVIEW_COUNT = 20;
+
 /**
  * Scanner (Home) — brief Section 7. Live Zustand store + expo-camera barcode
  * scanning, backed by the Section 7–8 sync layer. A successful read pauses the
@@ -47,6 +51,16 @@ export default function ScannerScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { status } = useAccess();
+
+  // Track focus so the camera pauses when another screen (Settings / View all)
+  // is on top — otherwise it could keep counting behind them.
+  const [isFocused, setIsFocused] = useState(true);
+  useFocusEffect(
+    useCallback(() => {
+      setIsFocused(true);
+      return () => setIsFocused(false);
+    }, []),
+  );
 
   const scans = useSessionStore((s) => s.scans);
   const total = useTotalCount();
@@ -74,11 +88,10 @@ export default function ScannerScreen() {
   const [exportOpen, setExportOpen] = useState(false);
   const [exportSuccess, setExportSuccess] = useState(false);
 
-  // Client scanning modes (feedback round 3):
-  //  - Auto-1: each read commits qty 1 and stays live for rapid-fire counting.
-  //  - Scan mode: toggle the camera between retail barcodes and QR codes.
+  // Auto-1: each read commits qty 1 and stays live for rapid-fire counting.
   const [auto1, setAuto1] = useState(false);
-  const [scanMode, setScanMode] = useState<'barcode' | 'qr'>('barcode');
+  // Scan mode (barcode vs QR) now lives in Settings and persists across launches.
+  const scanMode = useSettingsStore((s) => s.scanMode);
 
   // Live values for the scan callback, held in refs so the camera handler never
   // goes stale (and we don't re-subscribe the scanner on every render).
@@ -126,7 +139,7 @@ export default function ScannerScreen() {
   }, []);
 
   // Pop the calculator open as soon as a barcode is parked (client request:
-  // scan → count). Cancelling it falls back to the +/- stepper.
+  // scan → count). Cancelling it discards the parked scan.
   useEffect(() => {
     if (pendingBarcode != null) setCalc({ mode: 'new' });
   }, [pendingBarcode]);
@@ -138,12 +151,6 @@ export default function ScannerScreen() {
     handleScanned(
       String(Math.floor(1_000_000_000_000 + Math.random() * 8_999_999_999_999)),
     );
-  };
-
-  // Manual +/- keeps the expression in step (a plain number is its own expression).
-  const setQuantityManual = (value: number) => {
-    setQuantity(value);
-    setPendingExpression(String(value));
   };
 
   const resetPending = () => {
@@ -171,9 +178,6 @@ export default function ScannerScreen() {
       setCalc(null);
     }
   };
-
-  const toggleScanMode = () =>
-    setScanMode((m) => (m === 'barcode' ? 'qr' : 'barcode'));
 
   const handleCalcSave = (expression: string, total: number) => {
     if (calc?.mode === 'edit') {
@@ -234,10 +238,13 @@ export default function ScannerScreen() {
     );
   }
 
-  // Pause the camera while a scan is parked, the calculator is up, or the export
-  // sheet is open (so nothing is counted behind a modal). Auto-1 keeps it live.
-  const scannerActive = pendingBarcode == null && !exportOpen && calc == null;
+  // Pause the camera while a scan is parked, the calculator/export sheet is up,
+  // or the screen isn't focused (e.g. Settings or View all is open) — so nothing
+  // is counted behind another screen. Auto-1 keeps it live otherwise.
+  const scannerActive =
+    isFocused && pendingBarcode == null && !exportOpen && calc == null;
   const barcodeTypes = scanMode === 'qr' ? QR_TYPES : BARCODE_TYPES;
+  const recentPreview = scans.slice(0, RECENT_PREVIEW_COUNT);
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
@@ -277,24 +284,13 @@ export default function ScannerScreen() {
           />
         </CameraPermissionGate>
 
-        {/* Scan-mode toggle (client request). The label shows the mode you're
-            CURRENTLY in — "Barcode" means it's scanning barcodes — with a hint
-            that tapping switches. */}
-        <Pressable
-          onPress={toggleScanMode}
-          style={styles.scanModeToggle}
-          accessibilityRole="button"
-          accessibilityLabel={`Scan mode: ${
-            scanMode === 'barcode' ? 'barcode' : 'QR code'
-          }. Tap to switch to ${
-            scanMode === 'barcode' ? 'QR code' : 'barcode'
-          }.`}
-        >
-          <Text style={styles.scanModeText}>
-            {scanMode === 'barcode' ? 'Barcode' : 'QR'}
-          </Text>
-          <Text style={styles.scanModeHint}>tap to switch</Text>
-        </Pressable>
+        {/* QR mode is set in Settings now (client request) — a small badge keeps
+            it visible while scanning so it's clear which mode is active. */}
+        {scanMode === 'qr' && (
+          <View style={styles.modeBadge} pointerEvents="none">
+            <Text style={styles.modeBadgeText}>QR mode</Text>
+          </View>
+        )}
 
         {pendingBarcode != null && (
           <View style={styles.pendingBadge} pointerEvents="none">
@@ -314,11 +310,11 @@ export default function ScannerScreen() {
         )}
       </View>
 
-      {/* Quantity + Confirm (brief Section 7.4–7.5). Calculator button opens the
-          +/× count calculator for complex stacks (client request). Auto-1
-          (client request) skips all of this and counts 1 per scan. */}
+      {/* Controls (brief Section 7.4–7.5). The +/− stepper was removed (client
+          request) — quantity is entered via the calculator, which opens
+          automatically on each scan. Auto-1 skips it and counts 1 per scan. */}
       <View style={styles.controls}>
-        {/* Auto-1 rapid-fire toggle (left). */}
+        {/* Auto-1 toggle (left); calculator (right) when Auto-1 is off. */}
         <View style={styles.toggleRow}>
           <Pressable
             onPress={toggleAuto1}
@@ -331,29 +327,25 @@ export default function ScannerScreen() {
               ⚡ Auto-1 {auto1 ? 'ON' : 'OFF'}
             </Text>
           </Pressable>
-          {auto1 && (
+          {auto1 ? (
             <Text style={styles.auto1Hint} numberOfLines={2}>
               Each scan adds 1 — just keep scanning.
             </Text>
+          ) : (
+            <Pressable
+              style={styles.calcButton}
+              onPress={() => setCalc({ mode: 'new' })}
+              accessibilityRole="button"
+              accessibilityLabel="Open calculator"
+            >
+              <Text style={styles.calcButtonIcon}>🧮</Text>
+            </Pressable>
           )}
         </View>
 
-        {/* Manual counting controls — hidden in Auto-1 mode. */}
+        {/* Confirm / cancel a parked scan — hidden in Auto-1 mode. */}
         {!auto1 && (
           <>
-            <View style={styles.quantityRow}>
-              <View style={styles.quantityControls}>
-                <QuantityControls value={quantity} onChange={setQuantityManual} />
-              </View>
-              <Pressable
-                style={styles.calcButton}
-                onPress={() => setCalc({ mode: 'new' })}
-                accessibilityRole="button"
-                accessibilityLabel="Open calculator"
-              >
-                <Text style={styles.calcButtonIcon}>🧮</Text>
-              </Pressable>
-            </View>
             {/* Show the working when the count came from the calculator. */}
             {/\d[+×]/.test(pendingExpression) && (
               <Text style={styles.expressionHint} numberOfLines={1}>
@@ -384,18 +376,27 @@ export default function ScannerScreen() {
         )}
       </View>
 
-      {/* Recent scans (brief Section 7.6). The labelled header makes it clear
-          this is a scrollable list and shows how many items are in it. */}
+      {/* Recent scans (brief Section 7.6) — a short preview. "View all" opens the
+          full searchable list (client request). */}
       <View style={styles.listHeader}>
-        <Text style={styles.listHeaderLabel}>RECENT SCANS</Text>
+        <Text style={styles.listHeaderLabel}>
+          RECENT SCANS{scans.length > 0 ? ` (${scans.length})` : ''}
+        </Text>
         {scans.length > 0 && (
-          <Text style={styles.listHeaderCount}>{scans.length}</Text>
+          <Pressable
+            onPress={() => router.push('/(app)/scans')}
+            accessibilityRole="button"
+            accessibilityLabel="View all scans"
+            hitSlop={8}
+          >
+            <Text style={styles.viewAll}>View all ›</Text>
+          </Pressable>
         )}
       </View>
       <FlatList
         style={styles.list}
         contentContainerStyle={scans.length === 0 && styles.listEmptyContent}
-        data={scans}
+        data={recentPreview}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
           <ScanRow
@@ -407,6 +408,19 @@ export default function ScannerScreen() {
         indicatorStyle="black"
         ListEmptyComponent={
           <Text style={styles.empty}>No scans yet. Point the camera at a barcode to start.</Text>
+        }
+        ListFooterComponent={
+          scans.length > recentPreview.length ? (
+            <Pressable
+              style={styles.viewAllFooter}
+              onPress={() => router.push('/(app)/scans')}
+              accessibilityRole="button"
+            >
+              <Text style={styles.viewAllFooterText}>
+                View all {scans.length} scans ›
+              </Text>
+            </Pressable>
+          ) : null
         }
       />
 
@@ -516,25 +530,18 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
     backgroundColor: 'rgba(0,0,0,0.55)',
   },
-  scanModeToggle: {
+  modeBadge: {
     position: 'absolute',
     top: spacing.sm,
     right: spacing.sm,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs,
-    borderRadius: radii.button,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    alignItems: 'center',
+    borderRadius: radii.pill,
+    backgroundColor: 'rgba(46,46,190,0.85)',
   },
-  scanModeText: {
-    ...textStyles.bodyMedium,
-    color: colors.white,
-    fontSize: 15,
-  },
-  scanModeHint: {
+  modeBadgeText: {
     ...textStyles.caption,
-    color: 'rgba(255,255,255,0.7)',
-    fontSize: 10,
+    color: colors.white,
   },
   pendingBarcode: {
     ...textStyles.caption,
@@ -562,6 +569,7 @@ const styles = StyleSheet.create({
   toggleRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     gap: spacing.md,
   },
   auto1: {
@@ -590,17 +598,9 @@ const styles = StyleSheet.create({
     color: colors.grey500,
     flex: 1,
   },
-  quantityRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  quantityControls: {
-    flex: 1,
-  },
   calcButton: {
     width: 56,
-    height: 56,
+    height: 44,
     borderRadius: radii.button,
     borderWidth: 1.5,
     borderColor: colors.grey300,
@@ -641,9 +641,17 @@ const styles = StyleSheet.create({
     ...textStyles.sectionLabel,
     color: colors.grey700,
   },
-  listHeaderCount: {
+  viewAll: {
     ...textStyles.sectionLabel,
-    color: colors.grey500,
+    color: colors.blue,
+  },
+  viewAllFooter: {
+    paddingVertical: spacing.lg,
+    alignItems: 'center',
+  },
+  viewAllFooterText: {
+    ...textStyles.bodyMedium,
+    color: colors.blue,
   },
   list: {
     flex: 1,

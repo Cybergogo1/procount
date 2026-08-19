@@ -17,6 +17,7 @@ export default function AppLayout() {
       }}
     >
       <Stack.Screen name="index" />
+      <Stack.Screen name="scans" />
       <Stack.Screen name="settings" options={{ presentation: 'modal' }} />
       {/* Paywall is a hard gate (not a dismissable modal) — a swipe-down would
           just bounce back via the access redirect. */}

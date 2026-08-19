@@ -5,6 +5,7 @@ import { useSessionStore, type ScanItem } from '@/stores/useSessionStore';
 import { getOrCreateActiveSession, getSessionScans } from './api';
 import { bindConnectivity, syncQueue } from './queueInstance';
 import type { SyncStatus } from './types';
+import { useScanActions } from './useScanActions';
 
 type SessionSync = {
   /** 'idle' when the queue is empty, 'syncing' when writes are pending. */
@@ -90,77 +91,7 @@ export function useSessionSync(): SessionSync {
     };
   }, [sessionId]);
 
-  const store = useSessionStore;
-
-  const addScan = useCallback(
-    ({
-      barcode,
-      quantity,
-      expression,
-    }: {
-      barcode: string;
-      quantity: number;
-      expression: string;
-    }) => {
-      const item = store.getState().addScan({ barcode, quantity, expression });
-      const sid = store.getState().sessionId;
-      if (!(user && sid)) return;
-
-      syncQueue.enqueue({
-        type: 'insert_scan',
-        id: item.id,
-        sessionId: sid,
-        userId: user.id,
-        barcode: item.barcode,
-        quantity: item.quantity,
-        expression: item.expression,
-        scannedAt: item.scannedAt,
-      });
-    },
-    [store, user],
-  );
-
-  const editScan = useCallback(
-    (id: string, quantity: number, expression: string) => {
-      store.getState().updateScan(id, quantity, expression);
-      if (store.getState().sessionId) {
-        syncQueue.enqueue({ type: 'update_scan', id, quantity, expression });
-      }
-    },
-    [store],
-  );
-
-  const deleteScan = useCallback(
-    (id: string) => {
-      const removed = store.getState().removeScan(id);
-      if (removed && store.getState().sessionId) {
-        syncQueue.enqueue({ type: 'delete_scan', id });
-      }
-      return removed;
-    },
-    [store],
-  );
-
-  const restoreScan = useCallback(
-    (item: ScanItem, index: number) => {
-      store.getState().restoreScan(item, index);
-      const sid = store.getState().sessionId;
-      if (user && sid) {
-        // Re-insert with the same id — idempotent against the prior delete.
-        syncQueue.enqueue({
-          type: 'insert_scan',
-          id: item.id,
-          sessionId: sid,
-          userId: user.id,
-          barcode: item.barcode,
-          quantity: item.quantity,
-          expression: item.expression,
-          scannedAt: item.scannedAt,
-        });
-      }
-    },
-    [store, user],
-  );
+  const { addScan, editScan, deleteScan, restoreScan } = useScanActions();
 
   const waitUntilDrained = useCallback(() => syncQueue.waitUntilDrained(), []);
 
