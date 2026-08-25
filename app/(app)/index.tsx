@@ -23,6 +23,7 @@ import {
   QR_TYPES,
 } from '@/features/scanner/BarcodeScanner';
 import { CameraPermissionGate } from '@/features/scanner/CameraPermissionGate';
+import { ManualAddSheet } from '@/features/scanner/ManualAddSheet';
 import { useSessionSync } from '@/features/session/useSessionSync';
 import { useAccess } from '@/features/subscription/useAccess';
 import { maybeRequestReviewAfterExport } from '@/lib/review';
@@ -90,6 +91,10 @@ export default function ScannerScreen() {
 
   // Auto-1: each read commits qty 1 and stays live for rapid-fire counting.
   const [auto1, setAuto1] = useState(false);
+  // Torch (client request) — rear-camera light for scanning in poor conditions.
+  const [torch, setTorch] = useState(false);
+  // Manual add (client request) — enter an item that can't be scanned.
+  const [manualAdd, setManualAdd] = useState(false);
   // Scan mode (barcode vs QR) now lives in Settings and persists across launches.
   const scanMode = useSettingsStore((s) => s.scanMode);
 
@@ -280,6 +285,7 @@ export default function ScannerScreen() {
             onScan={handleScanned}
             barcodeTypes={barcodeTypes}
             autoRearmMs={auto1 ? AUTO1_COOLDOWN_MS : undefined}
+            enableTorch={torch}
             style={StyleSheet.absoluteFill}
           />
         </CameraPermissionGate>
@@ -310,41 +316,45 @@ export default function ScannerScreen() {
         )}
       </View>
 
-      {/* Controls (brief Section 7.4–7.5). The +/− stepper was removed (client
-          request) — quantity is entered via the calculator, which opens
-          automatically on each scan. Auto-1 skips it and counts 1 per scan. */}
+      {/* Quick action row (client request): Auto-1, Flashlight, Manual add,
+          Calculator — left to right. Auto-1 & Flashlight are toggles (lit when
+          active); Manual add and Calculator open their respective flows. */}
       <View style={styles.controls}>
-        {/* Auto-1 toggle (left); calculator (right) when Auto-1 is off. */}
-        <View style={styles.toggleRow}>
-          <Pressable
+        <View style={styles.actionRow}>
+          <QuickAction
+            icon="⚡"
+            label="Auto-1"
+            active={auto1}
             onPress={toggleAuto1}
-            style={[styles.auto1, auto1 && styles.auto1On]}
-            accessibilityRole="switch"
-            accessibilityState={{ checked: auto1 }}
-            accessibilityLabel="Auto-1 rapid scanning"
-          >
-            <Text style={[styles.auto1Label, auto1 && styles.auto1LabelOn]}>
-              ⚡ Auto-1 {auto1 ? 'ON' : 'OFF'}
-            </Text>
-          </Pressable>
-          {auto1 ? (
-            <Text style={styles.auto1Hint} numberOfLines={2}>
-              Each scan adds 1 — just keep scanning.
-            </Text>
-          ) : (
-            <Pressable
-              style={styles.calcButton}
-              onPress={() => setCalc({ mode: 'new' })}
-              accessibilityRole="button"
-              accessibilityLabel="Open calculator"
-            >
-              <Text style={styles.calcButtonIcon}>🧮</Text>
-            </Pressable>
-          )}
+            accessibilityLabel={`Auto-1 rapid scanning ${auto1 ? 'on' : 'off'}`}
+          />
+          <QuickAction
+            icon="🔦"
+            label="Light"
+            active={torch}
+            onPress={() => setTorch((t) => !t)}
+            accessibilityLabel={`Torch ${torch ? 'on' : 'off'}`}
+          />
+          <QuickAction
+            icon="＋"
+            label="Add"
+            onPress={() => setManualAdd(true)}
+            accessibilityLabel="Add an item manually"
+          />
+          <QuickAction
+            icon="🧮"
+            label="Calc"
+            onPress={() => setCalc({ mode: 'new' })}
+            accessibilityLabel="Open calculator"
+          />
         </View>
 
-        {/* Confirm / cancel a parked scan — hidden in Auto-1 mode. */}
-        {!auto1 && (
+        {/* Auto-1 status, or confirm/cancel a parked scan (manual mode). */}
+        {auto1 ? (
+          <Text style={styles.auto1Hint} numberOfLines={1}>
+            ⚡ Auto-1 on — each scan adds 1.
+          </Text>
+        ) : (
           <>
             {/* Show the working when the count came from the calculator. */}
             {/\d[+×]/.test(pendingExpression) && (
@@ -461,6 +471,13 @@ export default function ScannerScreen() {
         onSent={handleReportSent}
       />
 
+      {/* Manual add — type a barcode/SKU that won't scan (client request). */}
+      <ManualAddSheet
+        visible={manualAdd}
+        onClose={() => setManualAdd(false)}
+        onAdd={addScan}
+      />
+
       {/* Count calculator — for the in-progress scan ('new') and row edits. */}
       <CalculatorModal
         visible={calc != null}
@@ -470,6 +487,39 @@ export default function ScannerScreen() {
         onSave={handleCalcSave}
       />
     </View>
+  );
+}
+
+/** One cell of the quick action row: an icon + label, lit when `active`. */
+function QuickAction({
+  icon,
+  label,
+  active = false,
+  onPress,
+  accessibilityLabel,
+}: {
+  icon: string;
+  label: string;
+  active?: boolean;
+  onPress: () => void;
+  accessibilityLabel?: string;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel ?? label}
+      style={({ pressed }) => [
+        styles.action,
+        active && styles.actionOn,
+        pressed && styles.actionPressed,
+      ]}
+    >
+      <Text style={styles.actionIcon}>{icon}</Text>
+      <Text style={[styles.actionLabel, active && styles.actionLabelOn]}>
+        {label}
+      </Text>
+    </Pressable>
   );
 }
 
@@ -566,49 +616,42 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.lg,
     gap: spacing.md,
   },
-  toggleRow: {
+  actionRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: spacing.md,
+    gap: spacing.sm,
   },
-  auto1: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    height: 44,
-    paddingHorizontal: spacing.lg,
+  action: {
+    flex: 1,
+    height: 60,
     borderRadius: radii.button,
     borderWidth: 1.5,
     borderColor: colors.grey300,
     backgroundColor: colors.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 2,
   },
-  auto1On: {
+  actionOn: {
     borderColor: colors.blue,
     backgroundColor: colors.blueTint,
   },
-  auto1Label: {
-    ...textStyles.bodyMedium,
+  actionPressed: {
+    backgroundColor: colors.grey100,
+  },
+  actionIcon: {
+    fontSize: 22,
+  },
+  actionLabel: {
+    ...textStyles.caption,
     color: colors.grey700,
   },
-  auto1LabelOn: {
+  actionLabelOn: {
     color: colors.blue,
   },
   auto1Hint: {
     ...textStyles.caption,
     color: colors.grey500,
-    flex: 1,
-  },
-  calcButton: {
-    width: 56,
-    height: 44,
-    borderRadius: radii.button,
-    borderWidth: 1.5,
-    borderColor: colors.grey300,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  calcButtonIcon: {
-    fontSize: 24,
+    textAlign: 'center',
   },
   expressionHint: {
     ...textStyles.caption,

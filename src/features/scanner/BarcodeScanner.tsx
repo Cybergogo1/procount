@@ -22,6 +22,8 @@ type BarcodeScannerProps = {
    * stops the same code being counted repeatedly while it sits in frame.
    */
   autoRearmMs?: number;
+  /** Turn the rear-camera torch on for scanning in poor light (client request). */
+  enableTorch?: boolean;
   style?: StyleProp<ViewStyle>;
 };
 
@@ -53,6 +55,7 @@ export function BarcodeScanner({
   onScan,
   barcodeTypes = BARCODE_TYPES,
   autoRearmMs,
+  enableTorch = false,
   style,
 }: BarcodeScannerProps) {
   const playBeep = useScanBeep();
@@ -111,6 +114,7 @@ export function BarcodeScanner({
       <CameraView
         style={StyleSheet.absoluteFill}
         facing="back"
+        enableTorch={enableTorch}
         barcodeScannerSettings={{ barcodeTypes }}
         onBarcodeScanned={active ? handleBarcode : undefined}
       />
