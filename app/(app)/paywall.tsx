@@ -58,8 +58,15 @@ export default function PaywallScreen() {
   const handleRestore = async () => {
     setBusy('restore');
     try {
-      await restore();
-      goBackIfAllowed();
+      const restored = await restore();
+      if (restored) {
+        goBackIfAllowed();
+      } else {
+        Alert.alert(
+          'No active subscription',
+          'We couldn’t find a subscription to restore on this account. Tap Subscribe to continue.',
+        );
+      }
     } catch {
       Alert.alert('Restore failed', 'We couldn’t restore your purchases.');
     } finally {

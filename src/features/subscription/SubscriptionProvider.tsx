@@ -41,7 +41,8 @@ type SubscriptionContextValue = {
   available: boolean;
   refresh: () => Promise<void>;
   purchase: (pkg: PurchasesPackage) => Promise<void>;
-  restore: () => Promise<void>;
+  /** Resolves true when an active pro entitlement was restored. */
+  restore: () => Promise<boolean>;
 };
 
 const SubscriptionContext = createContext<SubscriptionContextValue | undefined>(
@@ -122,6 +123,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
   const restore = useCallback(async () => {
     const info = await restorePurchases();
     if (info) setCustomerInfo(info);
+    return isProActive(info);
   }, []);
 
   const value = useMemo<SubscriptionContextValue>(() => {

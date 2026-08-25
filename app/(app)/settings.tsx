@@ -83,8 +83,13 @@ export default function SettingsScreen() {
   const handleRestore = async () => {
     setRestoring(true);
     try {
-      await restore();
-      Alert.alert('Restore complete', 'Your purchases have been restored.');
+      const restored = await restore();
+      Alert.alert(
+        restored ? 'Restore complete' : 'Nothing to restore',
+        restored
+          ? 'Your purchases have been restored.'
+          : 'No active subscription was found on this account.',
+      );
     } catch {
       Alert.alert('Restore failed', 'We couldn’t restore your purchases.');
     } finally {
