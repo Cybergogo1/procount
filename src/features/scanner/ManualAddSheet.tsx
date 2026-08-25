@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import {
+  Keyboard,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -12,8 +13,8 @@ import {
 
 import { Button } from '@/components/Button';
 import { TextField } from '@/components/TextField';
-import { CalculatorModal } from '@/features/calculator/CalculatorModal';
-import { colors, radii, spacing, textStyles } from '@/theme';
+import { Calculator } from '@/features/calculator/CalculatorModal';
+import { colors, spacing, textStyles } from '@/theme';
 
 type ManualAddSheetProps = {
   visible: boolean;
@@ -26,12 +27,15 @@ type ManualAddSheetProps = {
  * barcode/SKU and set the quantity with the same calculator used for scans. The
  * result is a line identical to a scanned one, so it flows through the count and
  * export with no special handling.
+ *
+ * The calculator is shown INLINE (swapping the sheet's content), not as a second
+ * modal — stacking RN modals doesn't work and left the screen unresponsive.
  */
 export function ManualAddSheet({ visible, onClose, onAdd }: ManualAddSheetProps) {
   const [barcode, setBarcode] = useState('');
   const [quantity, setQuantity] = useState(1);
   const [expression, setExpression] = useState('1');
-  const [calcOpen, setCalcOpen] = useState(false);
+  const [mode, setMode] = useState<'form' | 'calc'>('form');
   const [error, setError] = useState<string | null>(null);
 
   const showsExpression = /\d[+×]/.test(expression);
@@ -40,10 +44,12 @@ export function ManualAddSheet({ visible, onClose, onAdd }: ManualAddSheetProps)
     setBarcode('');
     setQuantity(1);
     setExpression('1');
+    setMode('form');
     setError(null);
   };
 
   const handleClose = () => {
+    Keyboard.dismiss();
     reset();
     onClose();
   };
@@ -54,33 +60,49 @@ export function ManualAddSheet({ visible, onClose, onAdd }: ManualAddSheetProps)
       setError('Enter a barcode or SKU');
       return;
     }
+    Keyboard.dismiss();
     onAdd({ barcode: code, quantity, expression });
     reset();
     onClose();
   };
 
+  const openCalculator = () => {
+    Keyboard.dismiss(); // so the keypad isn't hidden behind the keyboard
+    setMode('calc');
+  };
+
   const handleCalcSave = (expr: string, total: number) => {
     setQuantity(total);
     setExpression(expr);
-    setCalcOpen(false);
+    setMode('form');
   };
 
   return (
-    <>
-      <Modal
-        visible={visible}
-        transparent
-        animationType="slide"
-        onRequestClose={handleClose}
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={handleClose}
+    >
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        <KeyboardAvoidingView
-          style={styles.flex}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        >
-          <View style={styles.backdrop}>
-            <Pressable style={styles.backdropFill} onPress={handleClose} />
-            <View style={styles.sheet}>
-              <View style={styles.handle} />
+        <View style={styles.backdrop}>
+          <Pressable style={styles.backdropFill} onPress={handleClose} />
+          <View style={styles.sheet}>
+            <View style={styles.handle} />
+
+            {mode === 'calc' ? (
+              <View style={styles.calcWrap}>
+                <Calculator
+                  initialExpression={showsExpression ? expression : ''}
+                  title="Quantity"
+                  onCancel={() => setMode('form')}
+                  onSave={handleCalcSave}
+                />
+              </View>
+            ) : (
               <ScrollView
                 contentContainerStyle={styles.content}
                 keyboardShouldPersistTaps="handled"
@@ -88,7 +110,7 @@ export function ManualAddSheet({ visible, onClose, onAdd }: ManualAddSheetProps)
               >
                 <Text style={styles.heading}>Add an item manually</Text>
                 <Text style={styles.sub}>
-                  For an item that won’t scan — type the code and set the quantity.
+                  For an item that won’t scan, type the code and set the quantity.
                 </Text>
 
                 <TextField
@@ -117,27 +139,18 @@ export function ManualAddSheet({ visible, onClose, onAdd }: ManualAddSheetProps)
                   <Button
                     label="🧮 Calculator"
                     variant="secondary"
-                    onPress={() => setCalcOpen(true)}
+                    onPress={openCalculator}
                   />
                 </View>
 
                 <Button label="Add to count" onPress={handleAdd} />
                 <Button label="Cancel" variant="text" onPress={handleClose} />
               </ScrollView>
-            </View>
+            )}
           </View>
-        </KeyboardAvoidingView>
-      </Modal>
-
-      {/* Same calculator as the scan flow, for building a stacked quantity. */}
-      <CalculatorModal
-        visible={calcOpen}
-        title="Quantity"
-        initialExpression={showsExpression ? expression : ''}
-        onCancel={() => setCalcOpen(false)}
-        onSave={handleCalcSave}
-      />
-    </>
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
   );
 }
 
@@ -159,6 +172,10 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 20,
     paddingTop: spacing.md,
     maxHeight: '92%',
+  },
+  calcWrap: {
+    paddingHorizontal: spacing.md,
+    paddingBottom: spacing.xl,
   },
   content: {
     paddingHorizontal: spacing.xl,

@@ -15,23 +15,28 @@ type CalculatorModalProps = {
 };
 
 /**
- * Count calculator (client request). A keypad for building a `+` / `×`
- * expression that mirrors how stock is stacked; the live total is the value
- * that gets saved. Used both for the in-progress scan and for editing a line.
+ * Count calculator keypad (client request) — the card only, no modal, so it can
+ * be shown inside a modal (CalculatorModal) OR inline (the manual-add sheet).
+ * Stacking one RN modal over another doesn't work, so inline is how manual add
+ * reuses it. Builds a `+` / `×` expression; the live total is what gets saved.
  */
-export function CalculatorModal({
-  visible,
+export function Calculator({
   initialExpression = '',
   title = 'Count',
   onCancel,
   onSave,
-}: CalculatorModalProps) {
+}: {
+  initialExpression?: string;
+  title?: string;
+  onCancel: () => void;
+  onSave: (expression: string, total: number) => void;
+}) {
   const [expression, setExpression] = useState(initialExpression);
 
-  // Load the starting expression each time the modal opens.
+  // Reset when re-opened for a different starting value.
   useEffect(() => {
-    if (visible) setExpression(initialExpression);
-  }, [visible, initialExpression]);
+    setExpression(initialExpression);
+  }, [initialExpression]);
 
   const total = useMemo(() => evaluateExpression(expression), [expression]);
 
@@ -76,6 +81,69 @@ export function CalculatorModal({
   };
 
   return (
+    <Pressable style={styles.card}>
+      <Text style={styles.title}>{title}</Text>
+
+      {/* Expression + live total. */}
+      <View style={styles.display}>
+        <Text style={styles.expression} numberOfLines={2}>
+          {expression || '0'}
+        </Text>
+        <Text style={styles.total}>= {total ?? '—'}</Text>
+      </View>
+
+      {/* Keypad — layout per client spec: right column C / ⌫ / ×,
+          bottom row + / 0 / SAVE (double-wide). */}
+      <View style={styles.grid}>
+        <View style={styles.row}>
+          <Key label="7" onPress={() => pressDigit('7')} />
+          <Key label="8" onPress={() => pressDigit('8')} />
+          <Key label="9" onPress={() => pressDigit('9')} />
+          <Key label="C" variant="danger" onPress={clear} accessibilityLabel="Clear" />
+        </View>
+        <View style={styles.row}>
+          <Key label="4" onPress={() => pressDigit('4')} />
+          <Key label="5" onPress={() => pressDigit('5')} />
+          <Key label="6" onPress={() => pressDigit('6')} />
+          <Key label="⌫" variant="op" onPress={backspace} accessibilityLabel="Backspace" />
+        </View>
+        <View style={styles.row}>
+          <Key label="1" onPress={() => pressDigit('1')} />
+          <Key label="2" onPress={() => pressDigit('2')} />
+          <Key label="3" onPress={() => pressDigit('3')} />
+          <Key label={MULTIPLY} variant="op" onPress={() => pressOperator(MULTIPLY)} />
+        </View>
+        <View style={styles.row}>
+          <Key label={ADD} variant="op" onPress={() => pressOperator(ADD)} />
+          <Key label="0" onPress={() => pressDigit('0')} />
+          <Key
+            label="SAVE"
+            variant="save"
+            flex={2}
+            disabled={total == null}
+            onPress={save}
+          />
+        </View>
+      </View>
+
+      <Pressable onPress={onCancel} style={styles.cancel} accessibilityRole="button">
+        <Text style={styles.cancelText}>Cancel</Text>
+      </Pressable>
+    </Pressable>
+  );
+}
+
+/**
+ * Modal wrapper around the calculator, for the in-progress scan and row edits.
+ */
+export function CalculatorModal({
+  visible,
+  initialExpression = '',
+  title = 'Count',
+  onCancel,
+  onSave,
+}: CalculatorModalProps) {
+  return (
     <Modal
       visible={visible}
       transparent
@@ -83,55 +151,14 @@ export function CalculatorModal({
       onRequestClose={onCancel}
     >
       <Pressable style={styles.backdrop} onPress={onCancel}>
-        <Pressable style={styles.card}>
-          <Text style={styles.title}>{title}</Text>
-
-          {/* Expression + live total. */}
-          <View style={styles.display}>
-            <Text style={styles.expression} numberOfLines={2}>
-              {expression || '0'}
-            </Text>
-            <Text style={styles.total}>= {total ?? '—'}</Text>
-          </View>
-
-          {/* Keypad — layout per client spec: right column C / ⌫ / ×,
-              bottom row + / 0 / SAVE (double-wide). */}
-          <View style={styles.grid}>
-            <View style={styles.row}>
-              <Key label="7" onPress={() => pressDigit('7')} />
-              <Key label="8" onPress={() => pressDigit('8')} />
-              <Key label="9" onPress={() => pressDigit('9')} />
-              <Key label="C" variant="danger" onPress={clear} accessibilityLabel="Clear" />
-            </View>
-            <View style={styles.row}>
-              <Key label="4" onPress={() => pressDigit('4')} />
-              <Key label="5" onPress={() => pressDigit('5')} />
-              <Key label="6" onPress={() => pressDigit('6')} />
-              <Key label="⌫" variant="op" onPress={backspace} accessibilityLabel="Backspace" />
-            </View>
-            <View style={styles.row}>
-              <Key label="1" onPress={() => pressDigit('1')} />
-              <Key label="2" onPress={() => pressDigit('2')} />
-              <Key label="3" onPress={() => pressDigit('3')} />
-              <Key label={MULTIPLY} variant="op" onPress={() => pressOperator(MULTIPLY)} />
-            </View>
-            <View style={styles.row}>
-              <Key label={ADD} variant="op" onPress={() => pressOperator(ADD)} />
-              <Key label="0" onPress={() => pressDigit('0')} />
-              <Key
-                label="SAVE"
-                variant="save"
-                flex={2}
-                disabled={total == null}
-                onPress={save}
-              />
-            </View>
-          </View>
-
-          <Pressable onPress={onCancel} style={styles.cancel} accessibilityRole="button">
-            <Text style={styles.cancelText}>Cancel</Text>
-          </Pressable>
-        </Pressable>
+        {visible && (
+          <Calculator
+            initialExpression={initialExpression}
+            title={title}
+            onCancel={onCancel}
+            onSave={onSave}
+          />
+        )}
       </Pressable>
     </Modal>
   );
