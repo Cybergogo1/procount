@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import {
   CameraView,
@@ -65,8 +65,28 @@ export function BarcodeScanner({
   const lastDataRef = useRef<string | null>(null);
   const rearmTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
+  // Live values kept in refs so `onBarcodeScanned` can be a single STABLE
+  // callback. Previously we paused by swapping that prop between a function and
+  // undefined, but that makes expo-camera reconfigure the capture session, which
+  // turns the torch off after a scan (client-reported). Keeping the callback
+  // stable and gating on `activeRef` avoids the reconfigure so the torch stays on.
+  const activeRef = useRef(active);
+  const onScanRef = useRef(onScan);
+  const playBeepRef = useRef(playBeep);
+  const autoRearmRef = useRef(autoRearmMs);
+  useEffect(() => {
+    onScanRef.current = onScan;
+  }, [onScan]);
+  useEffect(() => {
+    playBeepRef.current = playBeep;
+  }, [playBeep]);
+  useEffect(() => {
+    autoRearmRef.current = autoRearmMs;
+  }, [autoRearmMs]);
+
   useEffect(() => {
     // Re-arm the lock whenever scanning resumes, and drop any pending cooldown.
+    activeRef.current = active;
     if (active) lockRef.current = false;
     if (rearmTimer.current) {
       clearTimeout(rearmTimer.current);
@@ -82,8 +102,11 @@ export function BarcodeScanner({
     [],
   );
 
-  const handleBarcode = (result: BarcodeScanningResult) => {
-    const continuous = !!autoRearmMs && autoRearmMs > 0;
+  const handleBarcode = useCallback((result: BarcodeScanningResult) => {
+    if (!activeRef.current) return; // paused: a scan is parked or a sheet is up
+
+    const rearm = autoRearmRef.current;
+    const continuous = !!rearm && rearm > 0;
 
     if (lockRef.current) {
       // In rapid-fire, a *different* code means a new item — let it through
@@ -96,8 +119,8 @@ export function BarcodeScanner({
     lastDataRef.current = result.data;
 
     scanSuccessHaptic();
-    playBeep();
-    onScan(result.data);
+    playBeepRef.current();
+    onScanRef.current(result.data);
 
     // Auto-1 rapid-fire: re-arm after a short cooldown so the next item can be
     // read without a manual Confirm.
@@ -105,9 +128,9 @@ export function BarcodeScanner({
       if (rearmTimer.current) clearTimeout(rearmTimer.current);
       rearmTimer.current = setTimeout(() => {
         lockRef.current = false;
-      }, autoRearmMs);
+      }, rearm);
     }
-  };
+  }, []);
 
   return (
     <View style={[styles.container, style]}>
@@ -116,7 +139,7 @@ export function BarcodeScanner({
         facing="back"
         enableTorch={enableTorch}
         barcodeScannerSettings={{ barcodeTypes }}
-        onBarcodeScanned={active ? handleBarcode : undefined}
+        onBarcodeScanned={handleBarcode}
       />
 
       {/* Reticle + blue corner overlay. */}
