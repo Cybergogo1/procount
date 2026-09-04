@@ -12,6 +12,7 @@
         "EXPO_PUBLIC_SUPABASE_URL": "https://vndlqswuanywconfxgey.supabase.co",
         "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZuZGxxc3d1YW55d2NvbmZ4Z2V5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE2MTk3MTgsImV4cCI6MjA5NzE5NTcxOH0.y4Jq5WpQGJ2FakHS1ehC8tdkqPoyDesJwBzvnJp4fvQ",
         "EXPO_PUBLIC_REVENUECAT_APPLE_KEY": "appl_jMBGtdCVpslcTRsmGFrSqesPgim",
+        "EXPO_PUBLIC_REVENUECAT_GOOGLE_KEY": "goog_TzxHDXDLOQlYiCwZiAHFsGTbpFo",
         "EXPO_PUBLIC_DISABLE_PAYWALL": "true"
       }
     },
@@ -23,6 +24,7 @@
         "EXPO_PUBLIC_SUPABASE_URL": "https://vndlqswuanywconfxgey.supabase.co",
         "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZuZGxxc3d1YW55d2NvbmZ4Z2V5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE2MTk3MTgsImV4cCI6MjA5NzE5NTcxOH0.y4Jq5WpQGJ2FakHS1ehC8tdkqPoyDesJwBzvnJp4fvQ",
         "EXPO_PUBLIC_REVENUECAT_APPLE_KEY": "appl_jMBGtdCVpslcTRsmGFrSqesPgim",
+        "EXPO_PUBLIC_REVENUECAT_GOOGLE_KEY": "goog_TzxHDXDLOQlYiCwZiAHFsGTbpFo",
         "EXPO_PUBLIC_DISABLE_PAYWALL": "true"
       }
     },
@@ -33,6 +35,7 @@
         "EXPO_PUBLIC_SUPABASE_URL": "https://vndlqswuanywconfxgey.supabase.co",
         "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZuZGxxc3d1YW55d2NvbmZ4Z2V5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE2MTk3MTgsImV4cCI6MjA5NzE5NTcxOH0.y4Jq5WpQGJ2FakHS1ehC8tdkqPoyDesJwBzvnJp4fvQ",
         "EXPO_PUBLIC_REVENUECAT_APPLE_KEY": "appl_jMBGtdCVpslcTRsmGFrSqesPgim",
+        "EXPO_PUBLIC_REVENUECAT_GOOGLE_KEY": "goog_TzxHDXDLOQlYiCwZiAHFsGTbpFo",
         "EXPO_PUBLIC_DISABLE_PAYWALL": "false"
       }
     }
