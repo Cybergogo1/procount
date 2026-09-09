@@ -50,3 +50,9 @@ supabase/functions/**/deno.lock
 # App Store Connect API key (secret — never commit)
 AuthKey_*.p8
 *.p8
+
+# Google Play service account key (secret — never commit)
+procount-api-*.json
+*service-account*.json
+*-service-account.json
+google-services.json
