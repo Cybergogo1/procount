@@ -18,21 +18,22 @@ export type Database = {
       profiles: {
         Row: {
           id: string;
-          email: string;
+          // Nullable: anonymous users have no email (account-free onboarding).
+          email: string | null;
           trial_started_at: string;
           has_used_first_export: boolean;
           created_at: string;
         };
         Insert: {
           id: string;
-          email: string;
+          email?: string | null;
           trial_started_at?: string;
           has_used_first_export?: boolean;
           created_at?: string;
         };
         Update: {
           id?: string;
-          email?: string;
+          email?: string | null;
           trial_started_at?: string;
           has_used_first_export?: boolean;
           created_at?: string;
