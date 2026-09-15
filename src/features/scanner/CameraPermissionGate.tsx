@@ -1,5 +1,5 @@
 import { useEffect, type ReactNode } from 'react';
-import { Linking, StyleSheet, Text, View } from 'react-native';
+import { AppState, Linking, StyleSheet, Text, View } from 'react-native';
 import { useCameraPermissions } from 'expo-camera';
 
 import { Button } from '@/components/Button';
@@ -15,7 +15,7 @@ type CameraPermissionGateProps = {
  * open the OS settings. Children (the live camera) only mount once granted.
  */
 export function CameraPermissionGate({ children }: CameraPermissionGateProps) {
-  const [permission, requestPermission] = useCameraPermissions();
+  const [permission, requestPermission, getPermission] = useCameraPermissions();
 
   useEffect(() => {
     // Ask once automatically when the status is still undetermined.
@@ -23,6 +23,17 @@ export function CameraPermissionGate({ children }: CameraPermissionGateProps) {
       void requestPermission();
     }
   }, [permission, requestPermission]);
+
+  // Re-check when the app returns to the foreground — e.g. after the user grants
+  // camera access in the OS Settings. Without this the gate keeps showing the
+  // stale "Open settings" screen and the camera never mounts (client-reported
+  // on Android after granting via Settings).
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void getPermission();
+    });
+    return () => sub.remove();
+  }, [getPermission]);
 
   // Still resolving the initial permission status.
   if (!permission) {
