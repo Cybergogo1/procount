@@ -134,7 +134,11 @@ export function BarcodeScanner({
 
   return (
     <View style={[styles.container, style]}>
+      {/* key on the symbology set so switching Barcode<->QR remounts the camera
+          with the new barcodeScannerSettings. Android doesn't reliably apply a
+          live change to barcodeTypes, which left QR mode not scanning. */}
       <CameraView
+        key={barcodeTypes.join('-')}
         style={StyleSheet.absoluteFill}
         facing="back"
         enableTorch={enableTorch}

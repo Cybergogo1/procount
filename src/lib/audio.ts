@@ -28,11 +28,19 @@ export function useScanBeep(): () => void {
   }, [player]);
 
   return useCallback(async () => {
+    // Rewind to the start so rapid scans retrigger the beep, then play. These
+    // are separate so a failed/rejected seek (seen on Android when the player
+    // isn't fully ready) never prevents play() from firing — that left the beep
+    // silent on Android. Audio is non-essential feedback: never block the scan.
     try {
       await player.seekTo(0);
+    } catch {
+      // ignore — fall through and play anyway
+    }
+    try {
       player.play();
     } catch {
-      // Audio is non-essential feedback — never block the scan loop.
+      // ignore
     }
   }, [player]);
 }
